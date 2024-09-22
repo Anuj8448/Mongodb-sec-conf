@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Security Audit Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        table, th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background-color: #f2f2f2; }
+        .status-ok { color: green; }
+        .status-fail { color: red; }
+    </style>
+</head>
+<body>
+    <h1>MongoDB Security Audit Report</h1>
+    <table>
+        <tr>
+            <th>Test</th>
+            <th>Status</th>
+            <th>Details</th>
+        </tr>
+        <!-- MongoDB Checks -->
+        <tr>
+            <td>Authentication Enabled</td>
+            <td>{{ 'PASS' if results['authentication'] else 'FAIL' }}</td>
+            <td>{{ 'Authentication is properly configured.' if results['authentication'] else 'Authentication is not enabled!' }}</td>
+        </tr>
+        <tr>
+            <td>SSL/TLS Enabled</td>
+            <td>{{ 'PASS' if results['ssl_enabled'] else 'FAIL' }}</td>
+            <td>{{ 'SSL/TLS is enabled for secure communication.' if results['ssl_enabled'] else 'SSL/TLS is not enabled!' }}</td>
+        </tr>
+        <tr>
+            <td>IP Binding</td>
+            <td>{{ 'PASS' if results['ip_binding'] else 'FAIL' }}</td>
+            <td>{{ 'IP binding is secure.' if results['ip_binding'] else 'MongoDB is bound to all IPs (0.0.0.0), which is insecure!' }}</td>
+        </tr>
+        <tr>
+            <td>Audit Logging</td>
+            <td>{{ 'PASS' if results['audit_logging'] else 'FAIL' }}</td>
+            <td>{{ 'Audit logging is enabled.' if results['audit_logging'] else 'Audit logging is not enabled!' }}</td>
+        </tr>
+        <tr>
+    	    <td>Open Ports</td>
+            <td>{{ 'PASS' if not results['open_ports'] else 'FAIL' }}</td>
+            <td>{{ results['open_ports'] if results['open_ports'] else 'No risky open ports found.' }}</td>
+        </tr>
+
+        <tr>
+            <td>Replica Set Configured</td>
+            <td>{{ 'PASS' if results['replica_set'] else 'FAIL' }}</td>
+            <td>{{ 'Replica set is properly configured.' if results['replica_set'] else 'No replica set found.' }}</td>
+        </tr>
+
+        <!-- External Tools -->
+        <tr>
+            <td>Lynis System Audit</td>
+            <td>{{ 'PASS' if results['lynis_status'] else 'FAIL' }}</td>
+            <td>{{ results['lynis_summary'] }}</td>
+        </tr>
+        <tr>
+            <td>Nmap Scan</td>
+            <td>{{ 'PASS' if results['nmap_status'] else 'FAIL' }}</td>
+            <td><pre>{{ results['nmap_output'] }}</pre></td>
+        </tr>
+        <tr>
+            <td>Nikto Scan</td>
+            <td>{{ 'PASS' if results['nikto_status'] else 'FAIL' }}</td>
+            <td><pre>{{ results['nikto_output'] }}</pre></td>
+        </tr>
+        <tr>
+            <td>OpenSCAP Audit</td>
+            <td>{{ 'PASS' if results['openscap_status'] else 'FAIL' }}</td>
+            <td>{{ 'OpenSCAP report available at: ' + results['openscap_report'] if results['openscap_status'] else 'OpenSCAP audit failed!' }}</td>
+        </tr>
+    </table>
+</body>
+</html>
