@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MongoDB Security Audit Report</title>
     <style>
-        body { font-family: Arial, sans-serif; }
-        h1 { color: #333; }
-        table { width: 100%; border-collapse: collapse; }
-        table, th, td { border: 1px solid #ddd; padding: 8px; }
+        body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+        h1 { color: #333; text-align: center; }
+        table { width: 90%; margin: 20px auto; border-collapse: collapse; background-color: #fff; }
+        table, th, td { border: 1px solid #ddd; }
+        th, td { padding: 12px; text-align: left; }
         th { background-color: #f2f2f2; }
-        .status-ok { color: green; }
-        .status-fail { color: red; }
+        .status-pass { color: green; font-weight: bold; }
+        .status-fail { color: red; font-weight: bold; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
     </style>
 </head>
 <body>
@@ -22,59 +24,106 @@
             <th>Status</th>
             <th>Details</th>
         </tr>
+
         <!-- MongoDB Checks -->
         <tr>
             <td>Authentication Enabled</td>
-            <td>{{ 'PASS' if results['authentication'] else 'FAIL' }}</td>
-            <td>{{ 'Authentication is properly configured.' if results['authentication'] else 'Authentication is not enabled!' }}</td>
+            <td class="{{ 'status-pass' if results['authentication']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['authentication']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['authentication']['explanation'] }}</td>
         </tr>
         <tr>
             <td>SSL/TLS Enabled</td>
-            <td>{{ 'PASS' if results['ssl_enabled'] else 'FAIL' }}</td>
-            <td>{{ 'SSL/TLS is enabled for secure communication.' if results['ssl_enabled'] else 'SSL/TLS is not enabled!' }}</td>
+            <td class="{{ 'status-pass' if results['ssl_enabled']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['ssl_enabled']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['ssl_enabled']['explanation'] }}</td>
         </tr>
         <tr>
             <td>IP Binding</td>
-            <td>{{ 'PASS' if results['ip_binding'] else 'FAIL' }}</td>
-            <td>{{ 'IP binding is secure.' if results['ip_binding'] else 'MongoDB is bound to all IPs (0.0.0.0), which is insecure!' }}</td>
+            <td class="{{ 'status-pass' if results['ip_binding']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['ip_binding']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['ip_binding']['explanation'] }}</td>
         </tr>
         <tr>
             <td>Audit Logging</td>
-            <td>{{ 'PASS' if results['audit_logging'] else 'FAIL' }}</td>
-            <td>{{ 'Audit logging is enabled.' if results['audit_logging'] else 'Audit logging is not enabled!' }}</td>
+            <td class="{{ 'status-pass' if results['audit_logging']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['audit_logging']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['audit_logging']['explanation'] }}</td>
         </tr>
         <tr>
-    	    <td>Open Ports</td>
-            <td>{{ 'PASS' if not results['open_ports'] else 'FAIL' }}</td>
-            <td>{{ results['open_ports'] if results['open_ports'] else 'No risky open ports found.' }}</td>
+            <td>Open Ports</td>
+            <td class="{{ 'status-pass' if not results['open_ports']['status'] else 'status-fail' }}">
+                {{ 'PASS' if not results['open_ports']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['open_ports']['explanation'] }}</td>
         </tr>
-
+        <tr>
+            <td>User Roles and Password Strength</td>
+            <td class="{{ 'status-pass' if not results['user_roles']['status'] else 'status-fail' }}">
+                {{ 'PASS' if not results['user_roles']['status'] else 'FAIL' }}
+            </td>
+            <td>
+                {% if results['user_roles']['status'] %}
+                    {{ results['user_roles']['explanation'] }}
+                {% else %}
+                    {{ results['user_roles']['explanation'] }}
+                {% endif %}
+            </td>
+        </tr>
         <tr>
             <td>Replica Set Configured</td>
-            <td>{{ 'PASS' if results['replica_set'] else 'FAIL' }}</td>
-            <td>{{ 'Replica set is properly configured.' if results['replica_set'] else 'No replica set found.' }}</td>
+            <td class="{{ 'status-pass' if results['replica_set']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['replica_set']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['replica_set']['explanation'] }}</td>
+        </tr>
+        <tr>
+            <td>MongoDB Version</td>
+            <td class="{{ 'status-pass' if results['mongodb_version']['status'] != 'Unknown' else 'status-fail' }}">
+                {{ 'PASS' if results['mongodb_version']['status'] != 'Unknown' else 'FAIL' }}
+            </td>
+            <td>{{ results['mongodb_version']['explanation'] }}</td>
+        </tr>
+        <tr>
+            <td>Unnecessary Features Disabled</td>
+            <td class="{{ 'status-pass' if results['disabled_features']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['disabled_features']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['disabled_features']['explanation'] }}</td>
         </tr>
 
         <!-- External Tools -->
         <tr>
             <td>Lynis System Audit</td>
-            <td>{{ 'PASS' if results['lynis_status'] else 'FAIL' }}</td>
-            <td>{{ results['lynis_summary'] }}</td>
+            <td class="{{ 'status-pass' if results['lynis_status']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['lynis_status']['status'] else 'FAIL' }}
+            </td>
+            <td><pre>{{ results['lynis_status']['explanation'] }}</pre></td>
         </tr>
         <tr>
             <td>Nmap Scan</td>
-            <td>{{ 'PASS' if results['nmap_status'] else 'FAIL' }}</td>
-            <td><pre>{{ results['nmap_output'] }}</pre></td>
+            <td class="{{ 'status-pass' if results['nmap_status']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['nmap_status']['status'] else 'FAIL' }}
+            </td>
+            <td><pre>{{ results['nmap_status']['explanation'] }}</pre></td>
         </tr>
         <tr>
             <td>Nikto Scan</td>
-            <td>{{ 'PASS' if results['nikto_status'] else 'FAIL' }}</td>
-            <td><pre>{{ results['nikto_output'] }}</pre></td>
+            <td class="{{ 'status-pass' if results['nikto_status']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['nikto_status']['status'] else 'FAIL' }}
+            </td>
+            <td><pre>{{ results['nikto_status']['explanation'] }}</pre></td>
         </tr>
         <tr>
             <td>OpenSCAP Audit</td>
-            <td>{{ 'PASS' if results['openscap_status'] else 'FAIL' }}</td>
-            <td>{{ 'OpenSCAP report available at: ' + results['openscap_report'] if results['openscap_status'] else 'OpenSCAP audit failed!' }}</td>
+            <td class="{{ 'status-pass' if results['openscap_status']['status'] else 'status-fail' }}">
+                {{ 'PASS' if results['openscap_status']['status'] else 'FAIL' }}
+            </td>
+            <td>{{ results['openscap_status']['explanation'] }}</td>
         </tr>
     </table>
 </body>
