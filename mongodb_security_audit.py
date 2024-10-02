@@ -12,75 +12,109 @@ def check_authentication(db):
     try:
         server_status = db.command("serverStatus")
         return "authenticated" in server_status
-    except:
+    except Exception as e:
         return False
 
-# 2. Check Open Ports
+# 2. Check if SSL is Enabled
+def check_ssl_enabled(client):
+    try:
+        result = client.admin.command("getCmdLineOpts")
+        ssl_enabled = 'sslMode' in result['parsed']['net'] and result['parsed']['net']['sslMode'] == 'requireSSL'
+        return ssl_enabled
+    except Exception as e:
+        return False
+
+# 3. Check if IP Binding is Secure
+def check_ip_binding(client):
+    try:
+        result = client.admin.command("getCmdLineOpts")
+        bind_ip = result['parsed']['net']['bindIp']
+        return bind_ip != '0.0.0.0'
+    except Exception as e:
+        return False
+
+# 4. Check if Audit Logging is Enabled
+def check_audit_logging_enabled(client):
+    try:
+        result = client.admin.command("getCmdLineOpts")
+        return 'auditLog' in result['parsed']
+    except Exception as e:
+        return False
+
+# 5. Check Open Ports
 def check_open_ports(host='localhost', ports=[27017]):
     open_ports = []
     for port in ports:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(1)
-            result = sock.connect_ex((host, port))
-            if result == 0:
-                open_ports.append(port)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                result = sock.connect_ex((host, port))
+                if result == 0:
+                    open_ports.append(port)
+        except Exception as e:
+            pass
     return open_ports
 
-# 3. Check if SSL is Enabled
-def check_ssl_enabled(client):
-    admin_db = client.admin  # Correctly get the admin database
-    result = admin_db.command("getCmdLineOpts")
-    ssl_enabled = 'sslMode' in result['parsed']['net'] and result['parsed']['net']['sslMode'] == 'requireSSL'
-    return ssl_enabled
+# 6. Check User Roles and Password Strength
+def check_user_roles_and_password_strength(db, known_passwords):
+    try:
+        users_info = db.command("usersInfo")
+        user_info_with_password_strength = []
 
-# 4. Check Password Strength (Example user password is passed)
-def check_password_strength(user_password):
-    pattern = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
-    return bool(pattern.match(user_password))
+        for user in users_info['users']:
+            user_name = user['user']
+            roles = [role['role'] for role in user['roles']]
+            
+            # Check if password is in known_passwords dict
+            password = known_passwords.get(user_name, None)
+            if password:
+                password_strength = check_password_strength(password)
+            else:
+                password_strength = "Unknown (Password not provided)"
+            
+            user_info_with_password_strength.append({
+                "user": user_name,
+                "roles": roles,
+                "password_strength": "Strong" if password_strength == True else "Weak" if password_strength == False else password_strength
+            })
 
-# 5. Check if IP Binding is Secure
-def check_ip_binding(client):
-    result = client.admin.command("getCmdLineOpts")
-    bind_ip = result['parsed']['net']['bindIp']
-    if bind_ip == '0.0.0.0':
-        return False  # Insecure: open to all IPs
-    return True
+        return user_info_with_password_strength
 
-# 6. Check if Audit Logging is Enabled
-def check_audit_logging_enabled(client):
-    result = client.admin.command("getCmdLineOpts")
-    audit_logging = 'auditLog' in result['parsed']
-    return audit_logging
+    except Exception as e:
+        return []
 
-# 7. Check User Roles for Potential Privilege Escalation
-def check_user_roles(db):
-    users_info = db.command("usersInfo")
-    risky_roles = []
-    for user in users_info['users']:
-        for role in user['roles']:
-            if role['role'] in ['root', 'dbAdminAnyDatabase']:
-                risky_roles.append(user['user'])
-    return risky_roles
-
-# 8. Check if Replica Set is Configured
+# 7. Check if Replica Set is Configured
 def check_replica_set(db):
     try:
         db.admin.command('replSetGetStatus')
         return True
-    except:
+    except Exception as e:
         return False
 
-# 9. Check MongoDB Version
+# 8. Check MongoDB Version
 def check_mongodb_version(db):
-    server_info = db.command("buildInfo")
-    version = server_info['version']
-    return version
+    try:
+        server_info = db.command("buildInfo")
+        return server_info['version']
+    except Exception as e:
+        return "Unknown"
 
-# 10. Check if Unnecessary Features (like REST) are Disabled
+# 9. Check if Unnecessary Features (like REST) are Disabled
 def check_disabled_features(client):
-    result = client.admin.command("getCmdLineOpts")
-    rest_enabled = 'rest' in result['parsed']['net'] and result['parsed']['net']['rest']
-    return not rest_enabled  # Return True if REST is disabled
+    try:
+        result = client.admin.command("getCmdLineOpts")
+        rest_enabled = 'rest' in result['parsed']['net'] and result['parsed']['net']['rest']
+        return not rest_enabled
+    except Exception as e:
+        return False
+
+# 10. Check Password Strength
+def check_password_strength(user_password):
+    try:
+        pattern = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
+        return bool(pattern.match(user_password))
+    except Exception as e:
+        return False
 
 # Run Lynis audit
 def run_lynis_audit():
@@ -109,55 +143,119 @@ def run_nikto_scan(target='localhost'):
 # Run OpenSCAP audit
 def run_openscap_audit(profile='cis', report_path='openscap_report.html', datastream_path='/path/to/datastream.xml'):
     try:
-        result = subprocess.run(['oscap', 'xccdf', 'eval', '--profile', profile, '--report', report_path, datastream_path], capture_output=True, text=True)
-        return result.returncode == 0, report_path
+        result = subprocess.run(['oscap', 'xccdf', 'eval', '--profile', profile, '--report', report_path, datastream_path],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            return False, f"OpenSCAP audit failed! Details: {result.stderr.strip()}"
+        return True, report_path
     except Exception as e:
         return False, str(e)
 
 # Function to Run All Security Checks
-def run_security_checks(mongodb_uri):
+def run_security_checks(mongodb_uri, known_passwords):
     client = pymongo.MongoClient(mongodb_uri)
-    
-    # Use get_default_database to fetch the database from the URI
     db = client.get_default_database()
 
+    # Perform all checks once and store results
+    auth_status = check_authentication(db)
+    ssl_status = check_ssl_enabled(client)
+    ip_binding_status = check_ip_binding(client)
+    audit_logging_status = check_audit_logging_enabled(client)
+    open_ports_status = check_open_ports()
+    user_roles_info = check_user_roles_and_password_strength(db, known_passwords)
+    replica_set_status = check_replica_set(db)
+    mongodb_version_status = check_mongodb_version(db)
+    disabled_features_status = check_disabled_features(client)
+
+    # Combine results with explanations
     results = {
-        "authentication": check_authentication(db),
-        "ssl_enabled": check_ssl_enabled(client),  # Pass client here
-        "ip_binding": check_ip_binding(client),    # Pass client here
-        "audit_logging": check_audit_logging_enabled(client),  # Pass client here
-        "open_ports": check_open_ports(),
-        "user_roles": check_user_roles(db),
-        "replica_set": check_replica_set(db),
-        "mongodb_version": check_mongodb_version(db),
-        "disabled_features": check_disabled_features(client),  # Pass client here
-        "password_strength": check_password_strength("Example@123")  # Replace with real user passwords if necessary
+        "authentication": {
+            "status": auth_status,
+            "explanation": "MongoDB authentication is enabled, which protects access to the database." if auth_status else "MongoDB authentication is not enabled. Anyone can access the database."
+        },
+        "ssl_enabled": {
+            "status": ssl_status,
+            "explanation": "SSL/TLS is enabled, ensuring secure communication." if ssl_status else "SSL/TLS is not enabled, making communication vulnerable."
+        },
+        "ip_binding": {
+            "status": ip_binding_status,
+            "explanation": "MongoDB is only accessible from specific IPs." if ip_binding_status else "MongoDB is accessible from any IP, which is insecure."
+        },
+        "audit_logging": {
+            "status": audit_logging_status,
+            "explanation": "Audit logging is enabled, which helps track database activities." if audit_logging_status else "Audit logging is not enabled, which reduces traceability."
+        },
+        "open_ports": {
+            "status": open_ports_status,
+            "explanation": "Open ports found: " + ', '.join(map(str, open_ports_status)) if open_ports_status else "No risky open ports found."
+        },
+        "user_roles": {
+            "status": user_roles_info,
+            "explanation": "The following users have potential privilege risks or weak passwords: " + ', '.join([f"{user['user']} (roles: {', '.join(user['roles'])}, password strength: {user['password_strength']})" for user in user_roles_info]) if user_roles_info else "No risky user roles or weak passwords found."
+        },
+        "replica_set": {
+            "status": replica_set_status,
+            "explanation": "Replica set is configured, ensuring database redundancy." if replica_set_status else "Replica set is not configured, which may lead to data loss."
+        },
+        "mongodb_version": {
+            "status": mongodb_version_status,
+            "explanation": f"MongoDB version {mongodb_version_status} is running."
+        },
+        "disabled_features": {
+            "status": disabled_features_status,
+            "explanation": "Unnecessary features are disabled." if disabled_features_status else "Some unnecessary features like REST API are enabled."
+        }
+    }
+
+    # External tool results
+    lynis_status, lynis_output = run_lynis_audit()
+    results["lynis_status"] = {
+        "status": lynis_status,
+        "explanation": lynis_output if lynis_status else "Lynis audit failed."
     }
     
-    results['open_ports'] = ', '.join(map(str, results['open_ports'])) if results['open_ports'] else 'No open ports found.'
+    nmap_status, nmap_output = run_nmap_scan()
+    results["nmap_status"] = {
+        "status": nmap_status,
+        "explanation": nmap_output if nmap_status else "Nmap scan failed."
+    }
+    
+    nikto_status, nikto_output = run_nikto_scan()
+    results["nikto_status"] = {
+        "status": nikto_status,
+        "explanation": nikto_output if nikto_status else "Nikto scan failed."
+    }
 
-    # Integrate external tool results
-    results["lynis_status"], results["lynis_summary"] = run_lynis_audit()
-    results["nmap_status"], results["nmap_output"] = run_nmap_scan()
-    results["nikto_status"], results["nikto_output"] = run_nikto_scan()
-    results["openscap_status"], results["openscap_report"] = run_openscap_audit()
+    openscap_status, openscap_report = run_openscap_audit()
+    results["openscap_status"] = {
+        "status": openscap_status,
+        "explanation": f"OpenSCAP report generated at {openscap_report}" if openscap_status else "OpenSCAP audit failed."
+    }
 
     client.close()
     return results
 
 # Generate an HTML Report using Jinja2
 def generate_report(results):
-    # Load the template from the "templates" folder
     env = Environment(loader=FileSystemLoader('templates'))
     template = env.get_template('report_template.html')
     
     report_html = template.render(results=results)
 
-    with open("mongodb_security_report.html", "w") as f:
+    with open("mongodb_security_audit_report.html", "w") as f:
         f.write(report_html)
 
-# Main execution
+    return "mongodb_security_audit_report.html"
+
+# Example known passwords dictionary (to be replaced with actual passwords)
+known_passwords = {
+    "admin": "Admin@123",
+    "user1": "WeakPass123",
+    # Add other users and passwords here
+}
+
+# Example Usage
 if __name__ == "__main__":
-    results = run_security_checks(MONGODB_URI)
-    generate_report(results)
-    print("Security audit completed. Check the report at mongodb_security_report.html")
+    results = run_security_checks(MONGODB_URI, known_passwords)
+    report_file = generate_report(results)
+    print(f"Security audit report generated: {report_file}")
